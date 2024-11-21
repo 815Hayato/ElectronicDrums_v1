@@ -4,7 +4,8 @@
 Arduino(C/C++),電子回路
 
 ## 概要
-自作電子ドラムElectronicDrums_v0を改良したもの
+自作電子ドラムElectronicDrums_v0を改良したもの  
+→https://github.com/815Hayato/ElectronicDrums_v0  
 
 ## 変更点(予定)
 ・ヘッドをゴム素材に変更し、静音性を担保する(済)  
