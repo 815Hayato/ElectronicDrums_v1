@@ -1,12 +1,10 @@
 /*
-＜変更点＞
+＜修正点＞
 ・トリガリングのアルゴリズムを変更
 ・入力に複数のピエゾを用いる⇒打点推定モデルの実装
 ・打点推定を元に、打点のセンター/エッジで異なる音声を再生
 ・A0に用いるセンサをフェーダーに変更
-＜今後の修正点(予定)＞
 ・レイテンシ対策
-・デバッグ
 */
 
 #include <MozziGuts.h>
@@ -18,8 +16,10 @@ Sample <tome_NUM_CELLS, AUDIO_RATE> tome(tome_DATA); //タム(エッジ)の音�
 
 #define CONTROL_RATE 64
 
+
 //入力(フェーダー)に関わる変数
 int pitch;
+
 
 //入力(ピエゾ素子)に関わる変数
 int piezo0_present;
@@ -42,12 +42,15 @@ int piezo3_past;
 int piezo3_delta_present;
 int piezo3_delta_past;
 
+
 //トリガリングに関わる定数・変数
-const int THRESHOLD_CENTER = 50;
+const int THRESHOLD_CENTER = 100;
 const int THRESHOLD_EDGE = 30;
-const int COUNT = 300;
-const int LIMITTIME = 500;
-const int COOLTIME = 500;
+const int PASS_CENTER = 100;
+const int PASS_EDGE = 50;
+const int COUNT = 4;
+const int LIMITTIME = 8;
+const int COOLTIME = 4;
 
 int count0;
 bool count0_flag;
@@ -64,6 +67,7 @@ int cooltime3;
 
 int count_all;
 bool count_all_flag;
+
 
 //ゲイン推定に関わる変数
 int gain0_predict;
@@ -84,13 +88,15 @@ byte volume = 0; //0-255
 bool mode; //センターかエッジか
 const float BasicFrequency_c = (float) tomc_SAMPLERATE / (float) tomc_NUM_CELLS;  // 音源を再生するサンプリング周波数
 const float BasicFrequency_e = (float) tome_SAMPLERATE / (float) tome_NUM_CELLS;  // 音源を再生するサンプリング周波数
+
 float freq_c; //再生時のサンプリング周波数
-float freq_e; //再生時のサンプリング周波数
+float freq_e;
 
 
 //初期設定
 void setup() {
-  Serial.begin(9600);
+  //Serial.begin(9600);
+  startMozzi(CONTROL_RATE);
   count0 = 0;
   piezo0_past = 0;
   cooltime0 = COOLTIME;
@@ -130,6 +136,7 @@ void updateControl() {
   piezo1_present = analogRead(A3);
   piezo2_present = analogRead(A4);
   piezo3_present = analogRead(A5);
+  //Serial.println(piezo0_present);
 
   //piezo0
   piezo0_delta_present = piezo0_present - piezo0_past;
@@ -291,26 +298,28 @@ void updateControl() {
         if(gain[0]>=gain_edge){
           gain_out = gain[0];
           mode = true;
-          Serial.print("gain_out[center]: ");
-          Serial.println(gain_out);
+          //Serial.print("gain_out[center]: ");
+          //Serial.println(gain_out);
           volume = map(gain_out,0,1023,0,255);
           tomc.start(); //発音
         }else{
           gain_out = gain_edge;
           mode = false;
-          Serial.print("gain_out[edge]: ");
-          Serial.println(gain_out);
+          //Serial.print("gain_out[edge]: ");
+          //Serial.println(gain_out);
           volume = map(gain_out,0,1023,0,255);
           tome.start(); //発音
         }
 
+        /*
         for(int i=0;i<4;i++){
           Serial.print(gain[i]);
           Serial.print(" ");
           gain[i] = 0;
         }
-        //Serial.println("all_prepared");
-        //Serial.println();
+        Serial.println("all_prepared");
+        Serial.println(" ");
+        */
 
         gain0_ok = false;
         gain1_ok = false;
@@ -324,6 +333,90 @@ void updateControl() {
         gain3_predict = 0;
       }
     }else{
+      if(gain0_ok+gain1_ok+gain2_ok+gain3_ok >= 2){
+        gain_edge = 0;
+        for(int j=1;j<4;j++){
+          gain_edge = max(gain_edge,gain[j]);
+        }
+        if(gain[0]>=gain_edge){
+          gain_out = gain[0];
+          mode = true;
+          //Serial.print("gain_out[center]: ");
+          //Serial.println(gain_out);
+          volume = map(gain_out,0,1023,0,255);
+          tomc.start(); //発音
+        }else{
+          gain_out = gain_edge;
+          mode = false;
+          //Serial.print("gain_out[edge]: ");
+          //Serial.println(gain_out);
+          volume = map(gain_out,0,1023,0,255);
+          tome.start(); //発音
+        }
+
+        /*
+        for(int i=0;i<4;i++){
+          Serial.print(gain[i]);
+          Serial.print(" ");
+          gain[i] = 0;
+        }
+        Serial.println("ended");
+        */
+          
+      }else if(gain0_ok+gain1_ok+gain2_ok+gain3_ok == 1){
+        if(gain[0]>=PASS_CENTER){
+          gain_out = gain[0];
+          mode = true;
+          //Serial.print("gain_out[center]: ");
+          //Serial.println(gain_out);
+          volume = map(gain_out,0,1023,0,255);
+          tomc.start(); //発音
+        }else if(gain[1]>=PASS_EDGE){
+          gain_out = gain[1];
+          mode = false;
+          //Serial.print("gain_out[edge]: ");
+          //Serial.println(gain_out);
+          volume = map(gain_out,0,1023,0,255);
+          tome.start(); //発音
+        }else if(gain[2]>=PASS_EDGE){
+          gain_out = gain[2];
+          mode = false;
+          //Serial.print("gain_out[edge]: ");
+          //Serial.println(gain_out);
+          volume = map(gain_out,0,1023,0,255);
+          tome.start(); //発音
+        }else if(gain[3]>=PASS_EDGE){
+          gain_out = gain[3];
+          mode = false;
+          //Serial.print("gain_out[edge]: ");
+          //Serial.println(gain_out);
+          volume = map(gain_out,0,1023,0,255);
+          tome.start(); //発音
+        }
+
+        /*
+        for(int i=0;i<4;i++){
+          Serial.print(gain[i]);
+          Serial.print(" ");
+          gain[i] = 0;
+        }
+        Serial.println("abolished");
+        //Serial.println();
+        */
+
+      }else{
+        ;
+        /*
+        for(int i=0;i<4;i++){
+          Serial.print(gain[i]);
+          Serial.print(" ");
+          gain[i] = 0;
+        }
+        Serial.println("abolished");
+        Serial.println(" ");
+        */
+      }
+      /*
       if(gain0_ok==true && gain1_ok+gain2_ok+gain3_ok > 0){
         gain_edge = 0;
         for(int j=1;j<4;j++){
@@ -332,17 +425,18 @@ void updateControl() {
         if(gain[0]>=gain_edge){
           gain_out = gain[0];
           mode = true;
-          Serial.print("gain_out[center]: ");
-          Serial.println(gain_out);
+          //Serial.print("gain_out[center]: ");
+          //Serial.println(gain_out);
           volume = map(gain_out,0,1023,0,255);
           tomc.start(); //発音
         }else{
           gain_out = gain_edge;
           mode = false;
-          Serial.print("gain_out[edge]: ");
-          Serial.println(gain_out);
+          //Serial.print("gain_out[edge]: ");
+          //Serial.println(gain_out);
           volume = map(gain_out,0,1023,0,255);
-          tome.start(); //発音
+          //tome.start(); //発音
+          tomc.start(); //代替
         }
 
         for(int i=0;i<4;i++){
@@ -350,7 +444,7 @@ void updateControl() {
           Serial.print(" ");
           gain[i] = 0;
         }
-        //Serial.println("ended");
+        Serial.println("ended");
         //Serial.println();
         
       }else{
@@ -359,10 +453,11 @@ void updateControl() {
           Serial.print(" ");
           gain[i] = 0;
         }
-        //Serial.println("abolished");
-        //Serial.println();
+        Serial.println("abolished");
+        //Serial.println(" ");
 
       }
+      */
       gain0_ok = false;
       gain1_ok = false;
       gain2_ok = false;
@@ -388,12 +483,14 @@ void updateControl() {
 }
 
 int updateAudio(){
+
   if(mode==true){
     return (tomc.next()*volume) >> 8;
-  }else{
+  }else if(mode==false){
     return (tome.next()*volume) >> 8;
 
   }
+
 }
 
 void loop(){
