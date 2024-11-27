@@ -1,4 +1,4 @@
-# ElectronicDrums_v1 (制作中)
+# ElectronicDrums_v10
 
 ## 使用技術
 Arduino(C/C++),電子回路
